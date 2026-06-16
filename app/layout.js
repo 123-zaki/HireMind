@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ClerkProvider, Show, SignInButton, SignUpButton, UserButton } from '@clerk/nextjs';
 import { dark } from "@clerk/themes";
 import Header from "@/components/Header";
+import { Toaster } from "sonner";
 
 const lora = Lora({
   subsets: ["latin"],
@@ -42,6 +43,8 @@ export default function RootLayout({ children }) {
           >
             {/* <Header /> */}
             <Header />
+
+            <Toaster richColors />
             <main className="min-h-screen">{children}</main>
             {/* <Footer /> */}
           </ThemeProvider>

@@ -38,13 +38,13 @@ async function Header() {
                 </Show>
                 <Show when="signed-in">
                     {/* Links */}
-                    {user.role === "INTERVIEWER" && (
+                    {user?.role === "INTERVIEWER" && (
                         <Button variant='ghost' asChild>
                             <Link href='/dashboard'>Dashboard</Link>
                         </Button>
                     )}
 
-                    {user.role === "INTERVIEWEE" && (
+                    {user?.role === "INTERVIEWEE" && (
                         <>
                             <Button variant='ghost' asChild>
                                 <Link href='/explore'>

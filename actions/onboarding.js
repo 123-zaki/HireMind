@@ -4,7 +4,9 @@ import { db } from "@/lib/prisma";
 import { currentUser } from "@clerk/nextjs/server";
 
 export const completeOnboarding = async (data) => {
-    const {user} = await currentUser();
+    const user = await currentUser();
+    console.log("User: ", user);
+    
 
     if(!user) {
         throw new Error("Unauthorised");
