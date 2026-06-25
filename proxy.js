@@ -10,6 +10,11 @@ const isProtectedRoute = createRouteMatcher([
 ]);
 
 
+// Trusted external webhook endpoints that should bypass Arcjet protection like stream-webhook
+const isTrustedWebhook = createRouteMatcher([
+  "/api/webhooks/stream(.*)",
+]);
+
 // arcjet shield
 const aj = arcjet({
   key: process.env.ARCJET_KEY,
@@ -26,10 +31,12 @@ const aj = arcjet({
 });
 
 export default clerkMiddleware(async (auth, req) => {
-  // Apply Arcjet protection FIRST (before Clerk auth check)
-  const decision = await aj.protect(req);
-  if (decision.isDenied()) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Skip Arcjet protection for trusted webhooks
+  if(!isTrustedWebhook(req)) {
+    const decision = await aj.protect(req);
+    if(decision.isDenied()) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
   }
 
   const authData = await auth();
