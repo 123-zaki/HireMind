@@ -10,17 +10,17 @@ const CallPage = async ({ params }) => {
     const result = await getCallData(callId);
     if (result.error === "Unauthorized") {
         // Handle unauthorized access, e.g., redirect to login
-        toast.error("You must be signed in to access this call.")
+        // toast.error("You must be signed in to access this call.")
         redirect("/");
     }
     if (result.error === "Forbidden") {
         // Handle forbidden access, e.g., show an error message or redirect
-        toast.error("You do not have permission to access this call.")
+        // toast.error("You do not have permission to access this call.")
         redirect("/");
     }
     if (result.error === "Call not found") {
         // Handle call not found, e.g., show an error message or redirect
-        toast.error("This call does not exist.")
+        // toast.error("This call does not exist.")
         notFound();
     }
 
