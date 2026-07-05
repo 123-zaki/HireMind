@@ -72,9 +72,9 @@ const EarningsSection = ({ stats, history }) => {
         paymentMethod,
         paymentDetails: paymentMethod === "bank" ? bankDetails : (paymentMethod === "upi" ? { upi } : { paypal }),
         data: {
-          credits: balance,
-          platformFee: (0.2 * balance),
-          netAmount: (balance - 0.2 * balance)
+          credits: stats?.creditBalance ?? 0,
+          platformFee: (0.2 * (stats?.creditBalance ?? 0)),
+          netAmount: (stats?.creditBalance ?? 0) - 0.2 * (stats?.creditBalance ?? 0)
         },
       });
 
@@ -371,7 +371,7 @@ const EarningsSection = ({ stats, history }) => {
           <h2 className='text-stone-600 uppercase font-semibold tracking-tighter'>Withdrawal History</h2>
           <div className='flex flex-col gap-2 mt-4'>
             {history.map((h) => (
-              <div className='flex justify-between items-center p-4 border border-white/10 rounded-xl bg-[#1f1f17]'>
+              <div key={h.id} className='flex justify-between items-center p-4 border border-white/10 rounded-xl bg-[#1f1f17]'>
                 <div className='flex flex-col gap-2'>
                   <p className='text-stone-200 text-sm'>{h.credits} credits {"->"} ${h.netAmount}</p>
                   <p className='text-stone-300 text-xs'><span className='uppercase'>{h.paymentMethod}</span> {"."} {formatLocalDate(h.createdAt)}</p>

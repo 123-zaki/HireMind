@@ -173,7 +173,7 @@ model Payout {
   platformFee Float
   netAmount Float
   paymentMethod String
-  paymentDetail String
+  paymentDetail Json
   status PaymentStatus @default(PROCESSING)
   adminNote String?
   createdAt DateTime @default(now())

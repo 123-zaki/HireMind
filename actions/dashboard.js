@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/lib/prisma";
+import { sendPayoutEmail } from "@/lib/sendGrid";
 import { currentUser } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 
@@ -175,7 +176,7 @@ export const getWithdrawalHistory = async () => {
             orderBy: { createdAt: 'desc' }
         });
 
-        return {success: true, withdrawalHistory};
+        return { success: true, withdrawalHistory };
     } catch (error) {
         console.error("Error fetching withdrawal history:", error);
         throw new Error("Failed to fetch withdrawal history");
@@ -227,18 +228,112 @@ export const creditPayout = async ({ paymentDetails, paymentMethod, data }) => {
                     platformFee: data.platformFee,
                     netAmount: data.netAmount,
                     paymentMethod,
-                    paymentDetail: `You have withdrawn ${data.netAmount} dollars`,
+                    // paymentDetail is a json object with payment details
+                    paymentDetail: JSON.stringify(paymentDetails),
                     status: "PROCESSING",
                 }
             }),
 
             db.user.update({
-                where: {id: dbUser.id},
-                data: {creditBalance: 0}
-            })
+                where: { id: dbUser.id },
+                data: { creditBalance: { decrement: data.credits } }
+            }),
         ]);
 
-        return {payout, success: true};
+        // send email to admin about the payout request
+        const reviewUrl = `${process.env.NEXT_PUBLIC_APP_URL}/payout/${payout.id}`;
+
+        console.log("Review URL:", reviewUrl);
+        const response = await sendPayoutEmail({
+            to: process.env.ADMIN_EMAIL, subject: "New Payout Request",
+
+            text: `A new payout request has been submitted and is awaiting your review.
+
+            Interviewer: ${dbUser.name}
+            Email: ${dbUser.email}
+            Credits Requested: ${data.credits}
+            Gross Amount: $${((data.netAmount + data.platformFee) * 5).toFixed(2)}
+            Platform Fee: $${(data.platformFee * 5).toFixed(2)}
+            Net Payout: $${(data.netAmount * 5).toFixed(2)}
+            Payment Method: ${paymentMethod.toUpperCase()}
+
+            Please review the payout details and process or reject the request from the admin dashboard.
+
+            Thank you,
+            Skiller`,
+
+            html: `<div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: auto; border: 1px solid #e5e5e5; border-radius: 10px; overflow: hidden;">
+            <div style="background:#111827;padding:20px;text-align:center;">
+            <h2 style="color:#fbbf24;margin:0;">New Payout Request</h2>
+            </div>
+
+            <div style="padding:24px;color:#333;">
+            <p>Hello Admin,</p>
+
+            <p>
+            A new interviewer payout request has been submitted and is awaiting your
+            approval.
+            </p>
+
+            <table style="width:100%;border-collapse:collapse;margin:20px 0;">
+            <tr>
+                <td style="padding:8px 0;"><strong>Interviewer</strong></td>
+                <td style="padding:8px 0;">${dbUser.name}</td>
+            </tr>
+
+            <tr>
+                <td style="padding:8px 0;"><strong>Email</strong></td>
+                <td style="padding:8px 0;">${dbUser.email}</td>
+            </tr>
+
+            <tr>
+                <td style="padding:8px 0;"><strong>Credits</strong></td>
+                <td style="padding:8px 0;">${data.credits}</td>
+            </tr>
+
+            <tr>
+                <td style="padding:8px 0;"><strong>Gross Amount</strong></td>
+                <td style="padding:8px 0;">$${((data.netAmount + data.platformFee) * 5).toFixed(2)}</td>
+            </tr>
+
+            <tr>
+                <td style="padding:8px 0;"><strong>Platform Fee (20%)</strong></td>
+                <td style="padding:8px 0;">$${(data.platformFee * 5).toFixed(2)}</td>
+            </tr>
+
+            <tr>
+                <td style="padding:8px 0;"><strong>Net Payout</strong></td>
+                <td style="padding:8px 0;color:#16a34a;font-weight:bold;">
+                $${(data.netAmount * 5).toFixed(2)}
+                </td>
+            </tr>
+
+            <tr>
+                <td style="padding:8px 0;"><strong>Payment Method</strong></td>
+                <td style="padding:8px 0;">${paymentMethod.toUpperCase()}</td>
+            </tr>
+            </table>
+
+            <p>
+            Please log in to the admin dashboard to review the payment details and
+            either approve or reject this payout request.
+            </p>
+
+            <div style="margin-top:30px;text-align:center;">
+            <a href=${reviewUrl}
+                style="background:#f59e0b;color:#fff;padding:12px 24px;text-decoration:none;border-radius:6px;font-weight:bold;">
+                Review Payout Request
+            </a>
+            </div>
+
+            <p style="margin-top:30px;color:#777;font-size:13px;">
+            This is an automated notification from the Skiller platform.
+            </p>
+        </div>
+        </div>`
+        });
+
+        return { payout, success: true };
     } catch (error) {
         console.error("Error while payout: ", error);
         throw error;
@@ -247,21 +342,14 @@ export const creditPayout = async ({ paymentDetails, paymentMethod, data }) => {
 
 
 // for admin dashboard
-export const getPayoutRequests = async () => {
-    const user = await currentUser();
-    if (!user) {
-        throw new Error("Unauthorized");
-    }
-    const dbUser = await db.user.findUnique({
-        where: { clerkUserId: user.id },
-    });
-    if (!dbUser || dbUser.role !== "UNASSIGNED") {
-        throw new Error("Forbidden");
+export const getPayoutRequest = async ({ payoutId }) => {
+    if (!payoutId) {
+        throw new Error("Payout id is required");
     }
 
     try {
-        const payoutRequests = await db.payout.findMany({
-            where: { status: "PROCESSING" },
+        const payoutRequest = await db.payout.findUnique({
+            where: { id: payoutId },
             include: {
                 interviewer: {
                     select: {
@@ -271,34 +359,48 @@ export const getPayoutRequests = async () => {
                 }
             }
         });
-        return {payoutRequests, success: true};
+        return { payoutRequest, success: true };
     } catch (error) {
         console.error("Error while fetching payout requests: ", error);
         throw error;
     }
 };
 
-export const processPayout = async ({id, status, adminNote}) => {
+export const approvePayout = async ({ id, status, adminNote, adminPassword }) => {
     console.log("Payout id: ", id);
-    const user = await currentUser();
-    if (!user) {
-        throw new Error("Unauthorized");
-    }
-    const dbUser = await db.user.findUnique({
-        where: { clerkUserId: user.id },
-    });
-    if (!dbUser || dbUser.role !== "UNASSIGNED") {
-        throw new Error("Forbidden");
+
+    // match admin password with env variable
+    if (adminPassword !== process.env.ADMIN_PASSWORD) {
+        throw new Error("Invalid admin password");
     }
 
     try {
-        const payout = await db.payout.update({
+        const payoutRequest = await db.payout.findUnique({
             where: { id },
-            data: { status: status, adminNote }
         });
-        return {payout, success: true};
+
+        if (!payoutRequest) {
+            throw new Error("Payout request not found");
+        }
+
+        if (payoutRequest.status !== "PROCESSING") {
+            throw new Error("Payout request is not in processing state");
+        }
+
+        const [updatedPayout, paymentResponse] = await db.$transaction([
+            db.payout.update({
+                where: { id },
+                data: {
+                    status,
+                    adminNote
+                }
+            }),
+
+            // Here you can add logic to actually process the payment using the payment details
+        ]);
+        return { result: updatedPayout, success: true };
     } catch (error) {
-        console.error("Error while processing payout: ", error);
+        console.error("Error while approving payout: ", error);
         throw error;
     }
 };
